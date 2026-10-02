@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doodle Garden</title>
+<style>
+  :root { --bg:#0b0d1a; --panel:#161a2e; --text:#e8eaf6; --accent:#7c9cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:system-ui,sans-serif;
+         display:flex; flex-direction:column; height:100vh; }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:10px 16px; background:var(--panel); }
+  h1 { font-size:18px; margin:0 8px 0 0; }
+  label { display:flex; align-items:center; gap:6px; font-size:13px; }
+  select, input[type=range], button { accent-color:var(--accent); }
+  select, button { background:#232845; color:var(--text); border:1px solid #333a63; border-radius:6px; padding:6px 10px; cursor:pointer; }
+  button:hover { background:#2e3560; }
+  main { flex:1; min-height:0; }
+  canvas { width:100%; height:100%; display:block; touch-action:none; cursor:crosshair; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌸 Doodle Garden</h1>
+  <label>Symmetry <input id="sym" type="range" min="2" max="16" value="8"><span id="symv">8</span></label>
+  <label>Brush <input id="size" type="range" min="1" max="20" value="4"></label>
+  <label>Palette
+    <select id="pal">
+      <option value="rainbow">Rainbow</option>
+      <option value="sunset">Sunset</option>
+      <option value="ocean">Ocean</option>
+      <option value="forest">Forest</option>
+      <option value="mono">Mono</option>
+    </select>
+  </label>
+  <label><input id="mirror" type="checkbox" checked> Mirror</label>
+  <button id="undo">Undo</button>
+  <button id="clear">Clear</button>
+  <button id="save">Save PNG</button>
+</header>
+<main><canvas id="c"></canvas></main>
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const palettes = {
+  rainbow: t => `hsl(${(t*3)%360},90%,62%)`,
+  sunset:  t => `hsl(${(340+ (t*0.4)%80)%360},90%,${55+Math.sin(t/20)*10}%)`,
+  ocean:   t => `hsl(${180+(t*0.5)%60},85%,${55+Math.sin(t/15)*10}%)`,
+  forest:  t => `hsl(${90+(t*0.5)%70},70%,${48+Math.sin(t/18)*10}%)`,
+  mono:    t => `hsl(230,20%,${70+Math.sin(t/10)*20}%)`,
+};
+let strokes = [], cur = null, hue = 0;
+
+function resize() {
+  const r = cv.parentElement.getBoundingClientRect(), d = devicePixelRatio || 1;
+  cv.width = r.width*d; cv.height = r.height*d;
+  ctx.setTransform(d,0,0,d,0,0);
+  redraw();
+}
+function seg(a, b, color, w, n, mirror) {
+  const cx = cv.clientWidth/2, cy = cv.clientHeight/2;
+  const rot = p => { const x=p.x-cx, y=p.y-cy; return {x,y}; };
+  const A = rot(a), B = rot(b);
+  ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.shadowColor = color; ctx.shadowBlur = 8;
+  for (let i=0;i<n;i++) {
+    const ang = i*2*Math.PI/n, c=Math.cos(ang), s=Math.sin(ang);
+    for (const f of mirror ? [1,-1] : [1]) {
+      const t = p => ({ x: cx + p.x*c - p.y*f*s, y: cy + p.x*s + p.y*f*c });
+      const p1 = t(A), p2 = t(B);
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+  }
+}
+function drawSeg(st, i) {
+  seg(st.pts[i-1], st.pts[i], palettes[st.pal](st.t0+i*2), st.w, st.n, st.mirror);
+}
+function redraw() {
+  ctx.clearRect(0,0,cv.clientWidth,cv.clientHeight);
+  for (const st of strokes) for (let i=1;i<st.pts.length;i++) drawSeg(st,i);
+}
+function pos(e) { const r = cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  hue += 40;
+  cur = { pts:[pos(e)], n:+$('sym').value, w:+$('size').value, pal:$('pal').value, mirror:$('mirror').checked, t0:hue };
+  strokes.push(cur);
+});
+cv.addEventListener('pointermove', e => {
+  if (!cur) return;
+  cur.pts.push(pos(e));
+  drawSeg(cur, cur.pts.length-1);
+});
+const end = () => { cur = null; };
+cv.addEventListener('pointerup', end);
+cv.addEventListener('pointercancel', end);
+
+$('sym').oninput = () => $('symv').textContent = $('sym').value;
+$('undo').onclick = () => { strokes.pop(); redraw(); };
+$('clear').onclick = () => { strokes = []; redraw(); };
+$('save').onclick = () => {
+  const out = document.createElement('canvas');
+  out.width = cv.width; out.height = cv.height;
+  const o = out.getContext('2d');
+  o.fillStyle = '#0b0d1a'; o.fillRect(0,0,out.width,out.height);
+  o.drawImage(cv,0,0);
+  const a = document.createElement('a');
+  a.download = 'doodle-garden.png'; a.href = out.toDataURL(); a.click();
+};
+addEventListener('keydown', e => { if ((e.ctrlKey||e.metaKey) && e.key==='z') $('undo').click(); });
+addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
