@@ -38,7 +38,7 @@
   <button id="clear">Clear</button>
   <button id="save">Save PNG</button>
 </header>
-<main><canvas id="c"></canvas></main>
+<main><canvas id="c" role="img" aria-label="Drawing canvas: draw with a pointer to create symmetric patterns"></canvas></main>
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const $ = id => document.getElementById(id);
